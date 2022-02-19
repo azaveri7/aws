@@ -1,0 +1,1071 @@
+1. https://mybucketanandz.s3.amazonaws.com/chats.html
+
+   Upload all the files and folders from v1 and v2 in a bucket which you created.
+   
+   Enable static web site hosting.
+   
+   Update the below policy given in Policies folder in v2.
+   
+   {
+  "Version": "2012-10-17",
+  "Id": "Policy1497053408897",
+  "Statement": [
+    {
+      "Sid": "Stmt1497053406813",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::mybucketanandz/*"
+    }
+  ]
+}
+
+2. Add this in conversations.json
+{
+    "participants": ["Student", "Anand"],
+    "id": "hello-world"
+}
+
+3. Create a hello-world.json with below msg
+
+{
+  "id": "hello-world",
+  "participants": ["Student", "Anand"],
+  "messages": [
+    {
+      "sender": "Anand",
+      "time": 1512246342159,
+      "message": "This is Anand. I'm also sending you a message."
+    }
+  ]
+}
+
+
+4. Create a policy named 'Chat-S3-Access' policy for access to all
+   ojbects in our S3.
+   
+   IAM -> Policies -> Create Policy -> Service -> Choose a service -> S3
+   
+   Actions -> Read 
+
+   Resource -> Object 
+     in bucket put bucket name: mybucketanandz
+     in object select checkbox 'Any'	
+
+   Next -> Next -> Review -> Name 	 'Chat-S3-Access' -> Create policy
+   
+   Create a role Chat-Lambda-Data with 
+	-	AWSLambdaBasicExecutionRole and 
+    -	Chat-S3-Access policies 
+   which will be used by Lambda service.
+   
+5. Create a lambda function Chat-API-Proxy with Runtime Node and in Permissions select
+   'Chat-Lambda-Data' role.
+   
+   Go to code tab and from folder v3 and open code from Lambda folder and paste there and then click Deploy.
+   
+   'use strict';
+
+var AWS = require('aws-sdk');
+
+var S3 = new AWS.S3();
+
+var bucket = '<your bucket name>';
+
+exports.handler = function (event, context, callback) {
+
+    const done = function (err, res) {
+        callback(null, {
+            statusCode: err ? '400' : '200',
+            body: err ? JSON.stringify(err) : JSON.stringify(res),
+            headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            }
+        });
+    };
+
+    S3.getObject({
+        Bucket: bucket,
+        Key: 'data/conversations.json'
+    }, function (err, data) {
+        done(err, err ? null : JSON.parse(data.Body.toString()));
+    });
+};
+
+    Create a test event called hello-world and content as {} as our lambda function does not require
+	any input and save this event and click on test.
+	
+	output:
+	
+	Test Event Name
+conversation
+
+Test Event Name
+conversation
+
+Response
+{
+  "statusCode": "200",
+  "body": "[{\"participants\":[\"Student\",\"Brian\"],\"id\":\"1\"},{\"participants\":[\"Student\",\"Frank\"],\"id\":\"2\"},{\"participants\":[\"Student\",\"Anand\"],\"id\":\"hello-world\"}]",
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*"
+  }
+}
+
+Function Logs
+START RequestId: f6b8198d-23aa-45e0-b5ba-e051b147e6f3 Version: $LATEST
+END RequestId: f6b8198d-23aa-45e0-b5ba-e051b147e6f3
+REPORT RequestId: f6b8198d-23aa-45e0-b5ba-e051b147e6f3	Duration: 449.67 ms	Billed Duration: 450 ms	Memory Size: 128 MB	Max Memory Used: 79 MB
+
+Request ID
+f6b8198d-23aa-45e0-b5ba-e051b147e6f3
+
+6. Go to API Gateway -> REST API -> Build ->
+   New API 
+   
+   API Name : ChatAPI
+   Endpoint type : Edge optimized.
+   
+   Click Create.
+   
+   In Actions, click Create Resource.
+   
+   Click checkbox Configure as proxy resource
+   
+   Resource name: proxy
+   
+   Click Create Resource
+   
+   Select Lambda region and select Lambda function Chat-API-Proxy
+   
+   Click Save.
+   
+   Click on Any. Click Test. 
+   Method: GET
+   Click TEST.
+   
+   Response body:
+   
+   [
+  {
+    "participants": [
+      "Student",
+      "Brian"
+    ],
+    "id": "1"
+  },
+  {
+    "participants": [
+      "Student",
+      "Frank"
+    ],
+    "id": "2"
+  },
+  {
+    "participants": [
+      "Student",
+      "Anand"
+    ],
+    "id": "hello-world"
+  }
+]
+
+7. CORS (Cross origin resource sharing)
+
+   Click on Proxy.
+   Select Actions -> Enable CORS -> Select checkboxes for 
+	- DEFAULT 4XX
+	- DEFAULT 5XX
+	
+   Click Enable CORS and replace existing CORS headers.
+   
+8. Clict Actions -> deploy API
+   Deployment stage: new and name: prod
+   Click Deploy
+   
+   We will get the invoke URL
+   
+   https://2vkk8vge93.execute-api.us-east-1.amazonaws.com/prod
+   
+   if u click on it, you will get 
+   
+   {"message":"Missing Authentication Token"}
+   
+   use below URL:
+   
+   https://2vkk8vge93.execute-api.us-east-1.amazonaws.com/prod/conversations
+   
+   [{"participants":["Student","Brian"],"id":"1"},{"participants":["Student","Frank"],"id":"2"},{"participants":["Student","Anand"],"id":"hello-world"}]
+   
+   Update invoke URL in v3 folder / Site / js / config.js
+   
+   ChatApp.apiEndpoint = 'https://2vkk8vge93.execute-api.us-east-1.amazonaws.com/prod';
+   
+   Copy the site.js and config.js in our s3 bucket.
+   
+   Now invoke our static website URL with chats.html
+   
+   http://mybucketanandz.s3-website-us-east-1.amazonaws.com/chats.html
+   
+   Now it displayes the result via APi gateway
+   
+9. CORS exercise
+
+   In our lambda code Chat-API-Proxy, there is code
+   
+   headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            }
+			
+  Replace * with http://google.com and Deploy
+  
+  Refresh your URL http://mybucketanandz.s3-website-us-east-1.amazonaws.com/chats.html
+  
+  In Dev tools, you will CORS error
+  
+  Access to XMLHttpRequest at 'https://2vkk8vge93.execute-api.us-east-1.amazonaws.com/prod/conversations' from origin 'http://mybucketanandz.s3-website-us-east-1.amazonaws.com' has been blocked by CORS policy: The 'Access-Control-Allow-Origin' header has a value 'http://google.com' that is not equal to the supplied origin.
+  
+  Now replace CORS header as follows:
+  
+  headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': 'http://mybucketanandz.s3-website-us-east-1.amazonaws.com'
+            }
+			
+  This indicates that access will be allowed only from S3 bucket.
+  
+  Again refresh URL http://mybucketanandz.s3-website-us-east-1.amazonaws.com/chats.html
+  
+  it starts working again.
+  
+10. Update the lambda code from v4 folder / Lambda and site.js from v4 / js folder and test events to 
+
+    {
+    "pathParameters":{
+        "proxy":"conversations"
+    }
+    }
+  
+  
+  and create a new test event 'individualconversation'
+  
+  {
+    "pathParameters":{
+        "proxy":"conversations/1"
+    }
+    }
+  
+  Also check URL http://mybucketanandz.s3-website-us-east-1.amazonaws.com/chats.html
+  
+  and click on any one name.
+  
+  http://mybucketanandz.s3-website-us-east-1.amazonaws.com/chat.html#hello-world
+  
+  so the invidividual conversation also works.
+  
+11. Create negative test events like 
+
+   {
+    "pathParameters":{
+        "proxy":"dummyValue"
+    }
+    }
+  
+  and 
+  
+  {
+    "pathParameters":{
+        "proxy":"conversations/thisdoesnotexists"
+    }
+    }
+	
+ When u test, both will fail.
+ 
+12. Section - 4 Use DynamoDB 
+
+    Create table name: Chat-Messages
+	
+	Primary key - 
+	
+	Partition key: ConversationId Datatype: String
+	Sort key: Timestamp Datatype: Number
+	
+	Uncheck Default settings
+	
+	Uncheck Read and Write capacity 
+	and keep both as 1
+	
+	Click create
+	
+	Create table name: Chat-Conversations
+	
+	Primary key - 
+	
+	Partition key: ConversationId Datatype: String
+	Sort key: Username Datatype: String
+	
+	Uncheck Default settings
+	
+	Add secondary index (Global secondary index)
+	
+	Primarykey: Username
+	Add sort key : ConversationId
+	Click Add Index
+	
+	Uncheck Read and Write capacity 
+	and keep both as 1
+	Also keep Username-ConversationId-Index 1 for Read and write capacity
+	
+	Click create
+	
+13. Add some data into dynamodb Chat-Messages
+
+    Go to Items
+	
+	ConversationId: 1
+	Timestamp: 1512246299194
+	Sender: Brian
+	Message: Hello, world!
+	
+	ConversationId: 2
+	Timestamp: 1512246299194
+	Sender: Frank
+	Message: Hello, world!
+	
+	Add some data into dynamodb Chat-Conversations
+
+    Go to Items
+   
+    ConversationId: 1
+	Username: Brian	
+	
+	ConversationId: 1
+	Username: Student
+	
+	ConversationId: 2
+	Username: Frank
+	
+	ConversationId: 2
+	Username: Student
+   
+    ConversationId: 3
+	Username: Anand
+	
+	ConversationId: 3
+	Username: Student
+	
+14. Create a new policy as below from v5 folder / Policies / lambda-data.json.
+     
+	IAM -> policy (Chat-DynamoDB)
+	
+	Role (Chat-Lambda-Data) -> Attach policy and attach Chat-DynamoDB
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VisualEditor0",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:BatchWriteItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:<region>:<your account id>:table/Chat-Conversations",
+        "arn:aws:dynamodb:<region>:<your account id>:table/Chat-Messages",
+        "arn:aws:dynamodb:<region>:<your account id>:table/Chat-Conversations/index/Username-ConversationId-index"
+      ]
+    }
+  ]
+}
+
+Replace the values 
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VisualEditor0",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:BatchWriteItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:699402178455:table/Chat-Conversations",
+        "arn:aws:dynamodb:us-east-1:699402178455:table/Chat-Messages",
+        "arn:aws:dynamodb:us-east-1:699402178455:table/Chat-Conversations/index/Username-ConversationId-index"
+      ]
+    }
+  ]
+}
+
+Update the lambda function code from v5 folder / Lambda
+
+15. Update the lambda function code from v6 folder / Lambda
+    and site.js from js folder
+	
+16. Update the lambda function code from v7 folder / Lambda
+    and update the test case.
+	
+	{
+  "httpMethod": "GET",
+  "pathParameters": {
+    "proxy": "conversations/1"
+  }
+}
+
+Create a new test event newMessage
+
+{
+  "httpMethod": "POST",
+  "body": "This is a new message",
+  "pathParameters": {
+    "proxy": "conversations/1"
+  }
+}
+
+When u test this event, a new msg is stored.
+
+Again test below event to determine if the msg was persisted.
+   
+   
+   {
+  "httpMethod": "GET",
+  "pathParameters": {
+    "proxy": "conversations/1"
+  }
+}
+
+output:
+
+"body": "{\"id\":\"1\",\"participants\":[\"Brian\",\"Student\"],\"last\":1644848925837,\"messages\":[{\"sender\":\"Brian\",\"time\":1512246299194,\"message\":\"Hello, world!\"},{\"sender\":\"Student\",\"time\":1644848925837,\"message\":\"This is a new message\"}]}",
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*"
+  }
+}
+
+Also verify the same msg in DynamoDB Chat-Messages.
+
+Update the site.js from v7 folder / js and chat.html from v7 folder.
+
+Now you can use the Send button on individual conversation to send msg
+
+17. 
+
+Section 5 - Break up the monolith
+
+The purpose is to break the current lambda function (it consists of POST and GET both) into
+separate function and remove the proxy resource from API gateway.
+
+Delete proxy resource in our API gateway.
+
+API Gateway -> Actions -> Create Resource
+Name: conversations
+Click Create Resource
+
+Create GET method on conversations Resource.
+
+Create a resource conversation on conversations resource
+Name: conversation
+Resource path: /conversations/{id}
+Click Create Resource
+
+Create methods GET and POST on resource conversation
+
+Lambda functions:
+
+Create lambda function Chat-conversations-GET
+   with existing role Chat-Lambda-Data
+   
+Copy the code from v8 folder / Lambda / Chat-Conversation-GET.js
+
+Create a new test event TestConversations
+
+{}
+
+output:
+
+[
+  {
+    "id": "1",
+    "last": 1644849471448,
+    "participants": [
+      "Brian",
+      "Student"
+    ]
+  },
+  {
+    "id": "2",
+    "last": 1512246299194,
+    "participants": [
+      "Frank",
+      "Student"
+    ]
+  },
+  {
+    "id": "3",
+    "participants": [
+      "Anand",
+      "Student"
+    ]
+  }
+]
+
+Now configure this lambda fn in conversations /GET method
+
+Select region us-east-1 and lambda fn Chat-conversations-GET
+
+Create a model ConversationList
+Model name: ConversationList
+Content-type: application/json
+
+model-schema:
+copy form v8 folder / Models / ConversationList.json
+
+Click on /conversations /GET
+and on Method Response .
+
+Expand 200 and in Response Body select model ConversationList instead of Empty.
+
+Then navigate to Method execution -> Test and click on Test.
+
+Request: /conversations
+Status: 200
+Latency: 2024 ms
+Response Body
+[
+  {
+    "id": "1",
+    "last": 1644849471448,
+    "participants": [
+      "Brian",
+      "Student"
+    ]
+  },
+  {
+    "id": "2",
+    "last": 1512246299194,
+    "participants": [
+      "Frank",
+      "Student"
+    ]
+  },
+  {
+    "id": "3",
+    "participants": [
+      "Anand",
+      "Student"
+    ]
+  }
+]
+Response Headers
+{"X-Amzn-Trace-Id":"Root=1-620d4170-20717f145f1e643bff33e623;Sampled=0","Content-Type":"application/json"}
+
+Then Enable CORS for /conversations resource
+
+So an OPTIONS method is created for /conversations resource
+
+-----------
+Lambda function for reading / writing msgs
+-----------
+
+Reading:
+
+Create lambda function Chat-Messages-GET
+   with existing role Chat-Lambda-Data
+   
+Copy the code from v8 folder / Lambda / Chat-Messages-GET.js
+
+Now configure this lambda fn in /conversations/{id} /GET method
+
+Select region us-east-1 and lambda fn Chat-Messages-GET
+
+Create a model Conversation
+Model name: Conversation
+Content-type: application/json
+
+model-schema:
+copy form v8 folder / Models / Conversation.json
+
+Writing:
+
+Create lambda function Chat-Messages-POST
+   with existing role Chat-Lambda-Data
+   
+Copy the code from v8 folder / Lambda / Chat-Messages-POST.js
+
+Now configure this lambda fn in /conversations/{id} /POST method
+
+Select region us-east-1 and lambda fn Chat-Messages-POST 
+
+Create a model NewMessage
+Model name: NewMessage
+Content-type: application/json
+
+model-schema:
+copy form v8 folder / Models / NewMessage.json
+
+Now we need to map models
+
+For /conversation /GET we need to map {id}
+so click on GET and on Integration Request
+Expand Body Mapping Templates, Select second option via radio button 
+
+and provide below templete from v8 folder / Mapping Templates / Chat-Messages-GET-Input.vtl
+
+#set($inputRoot = $input.path('$'))
+{
+    "id": "$input.params('id')"
+}
+
+Now go to Method Execution -> Test
+
+and provide id = 1 in test
+
+output: 
+
+Request: /conversations/1
+Status: 200
+Latency: 1369 ms
+Response Body
+{
+  "id": "1",
+  "participants": [
+    "Brian",
+    "Student"
+  ],
+  "last": 1644849471448,
+  "messages": [
+    {
+      "sender": "Brian",
+      "time": 1512246299194,
+      "message": "Hello, world!"
+    },
+    {
+      "sender": "Student",
+      "time": 1644848925837,
+      "message": "This is a new message"
+    },
+    {
+      "sender": "Student",
+      "time": 1644849471448,
+      "message": "this is a "
+    }
+  ]
+}
+Response Headers
+{"X-Amzn-Trace-Id":"Root=1-620de6bd-c69e2176912fcc9d92d6c078;Sampled=0","Content-Type":"application/json"}
+
+Now need to map the response body
+
+Navigate to Method execution ->  Map model Conversation against 200
+
+
+For /conversation /POST we need to map {id}
+so click on POST and on Method Request
+
+Provide model NewMessage in Request Body
+
+Now click on POST and on Integration Request
+Expand Body Mapping Templates, Select second option via radio button
+
+Expand Body Mapping Templates, Select second option via radio button 
+
+and provide below templete from v8 folder / Mapping Templates / Chat-Messages-POST-Input.vtl
+
+#set($inputRoot = $input.path('$'))
+{
+    "id": "$input.params('id')",
+    "message": "$inputRoot"
+}
+
+Now go to Method Execution -> Test
+
+and provide id = 1 in test
+and request body as
+
+Space is the final frontier.
+
+output: 
+
+Now the output shows status as 200
+but POST should return 204 output
+so delete 200 from Method Response and
+Integration Response and add 204 instead at both places.
+
+Now the output is 
+
+Request: /conversations/1
+Status: 204
+Latency: 443 ms
+Response Body
+no data
+Response Headers
+{"X-Amzn-Trace-Id":"Root=1-620de9bf-ffacb10d185e0624e0d47b85;Sampled=0","Content-Type":"application/json"}
+
+Now click on /{id} and Enable CORS
+
+--------------
+Enable Swagger
+--------------
+
+Deploy API and get the invoke URL
+
+https://2vkk8vge93.execute-api.us-east-1.amazonaws.com/prod
+
+Go to SDK Generation -> select Javascript and click Generate SDK
+
+Upload the folder into our s3 bucket js folder
+
+update the site.js from v9 folder into our s3
+
+so in this new site.js we are going to replace ajax calls from jquery
+by our js client calls which makes the ajax calls.
+
+upload chat.html and chats.html from v9 folder on our s3
+
+Go to your API Gateway ChatAPI -> Stages -> Export -> Export as swagger -> yaml
+
+---
+swagger: "2.0"
+info:
+  version: "2022-02-17T06:25:57Z"
+  title: "ChatAPI"
+host: "2vkk8vge93.execute-api.us-east-1.amazonaws.com"
+basePath: "/prod"
+schemes:
+- "https"
+paths:
+  /conversations:
+    get:
+      produces:
+      - "application/json"
+      responses:
+        "200":
+          description: "200 response"
+          schema:
+            $ref: "#/definitions/ConversationList"
+          headers:
+            Access-Control-Allow-Origin:
+              type: "string"
+    options:
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      responses:
+        "200":
+          description: "200 response"
+          schema:
+            $ref: "#/definitions/Empty"
+          headers:
+            Access-Control-Allow-Origin:
+              type: "string"
+            Access-Control-Allow-Methods:
+              type: "string"
+            Access-Control-Allow-Headers:
+              type: "string"
+  /conversations/{id}:
+    get:
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "id"
+        in: "path"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "200 response"
+          schema:
+            $ref: "#/definitions/Conversation"
+          headers:
+            Access-Control-Allow-Origin:
+              type: "string"
+    post:
+      consumes:
+      - "application/json"
+      parameters:
+      - name: "id"
+        in: "path"
+        required: true
+        type: "string"
+      - in: "body"
+        name: "NewMessage"
+        required: true
+        schema:
+          $ref: "#/definitions/NewMessage"
+      responses:
+        "204":
+          description: "204 response"
+    options:
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "id"
+        in: "path"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "200 response"
+          schema:
+            $ref: "#/definitions/Empty"
+          headers:
+            Access-Control-Allow-Origin:
+              type: "string"
+            Access-Control-Allow-Methods:
+              type: "string"
+            Access-Control-Allow-Headers:
+              type: "string"
+definitions:
+  Empty:
+    type: "object"
+    title: "Empty Schema"
+  NewMessage:
+    type: "string"
+  Conversation:
+    type: "object"
+    properties:
+      id:
+        type: "string"
+      participants:
+        type: "array"
+        items:
+          type: "string"
+      last:
+        type: "number"
+        format: "utc-millisec"
+      messages:
+        type: "array"
+        items:
+          type: "object"
+          properties:
+            sender:
+              type: "string"
+            time:
+              type: "number"
+              format: "utc-millisec"
+            message:
+              type: "string"
+  ConversationList:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+        participants:
+          type: "array"
+          items:
+            type: "string"
+        last:
+          type: "number"
+          format: "utc-millisec"
+		  
+		  
+paste this content in https://editor.swagger.io/
+
+-------------
+
+need to remove hard-coding of all Student user in all Lamdba fns
+
+Chat-Messages-GET
+
+Change this line 
+
+Sender: {S: 'Student'}
+
+to
+
+Sender: {S: event.cognitoUsername}
+
+Change test to 
+{
+    "cognitoUsername":"Anand"
+}
+
+Also go to API Gateway and /conversation/{id}/POST
+and make changes in body template by click on integration request
+
+#set($inputRoot = $input.path('$'))
+{
+    "id": "$input.params('id')",
+    "message": "$inputRoot",
+    "cognitorUsername":"Student"
+}
+
+Also go to API Gateway and /conversations/GETT
+and make changes in body template by click on integration request
+
+{"cognitorUsername":"Student"
+}
+
+Since we have made changes to API, again Deploy API
+and create a new SDK and upload in S3
+
+====================
+Section 6 - Add Identity to the app
+====================
+
+Cognito -> Manager User Pools -> Create user pool -> Chat Pool -> Step through settings
+
+Check 
+	- Also allow sign in with verified email address
+    - email
+	- Allow users to sign themselves up
+	
+Create appclient named website by clicking on Create app client
+Choose only email while creation
+
+Click Create Pool
+
+Create an IM policy and copy the code from v10 folder / Policies
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VisualEditor0",
+      "Effect": "Allow",
+      "Action": "cognito-idp:ListUsers",
+      "Resource": "arn:aws:cognito-idp:<your region>:<account id>:userpool/<user pool id>"
+    }
+  ]
+}
+
+with 
+
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VisualEditor0",
+      "Effect": "Allow",
+      "Action": "cognito-idp:ListUsers",
+      "Resource": "arn:aws:cognito-idp:us-east-1:699402178455:userpool/us-east-1_GOwqoNbCM"
+    }
+  ]
+}
+
+Policy name: Lambda-Cognito
+
+Createa role for the above policy and AWSLambdaBasicExecutionRole
+and name it as Lambda-Cognito
+
+=========================
+Section 7 - Optimizing and preparing for production
+=========================
+Lets say you want to create a different version of your Lambda function
+
+so lets say you have now version-1 and 2
+
+you can go to API-Gateway and in Lambda function,
+write <Lambda-funcation-name>:<version>
+
+Chat-Messages-GET:1
+
+This is how u can test various lambda versions
+
+You can also create a new stage for API Gateway, lets call it test
+
+you can refer different lambda versions in test stage of API gateway and test it
+
+You can go to API Gateway and Enable Canary deployment.
+You can give weight so that number of requests will be split
+between old and new by weight percent.
+
+There will be Deployment history in the stage tab which u can use it.
+
+Moreover, you can use different versions as 
+
+------------
+Using stage variables
+------------
+
+lets say u create below stage variables:
+
+Go to API Gateway -> Chat API -> Stages -> prod
+
+Name                Value
+ConversationTable 	Chat-Conversations
+MessageTable        Chat-Messages
+
+Now we need to use these 2 variables in our code.
+
+
+Also go to API Gateway and /conversation/{id}/POST
+and make changes in body template by click on integration request
+
+#set($inputRoot = $input.path('$'))
+{
+    "id": "$input.params('id')",
+    "message": "$inputRoot",
+    "cognitorUsername":"Student",
+	"tables": {
+		"conversations":"$stageVariables.ConversationTable",
+		"messages":"$stageVariables.MessageTable"
+	}
+}
+
+Click Save
+
+Now need to edit Lambda fn Chat-Messages-POST
+
+in the lambda fn,
+
+dynamo.putItem({
+
+	TableName: "Chat-Messages"
+....
+....	
+})
+
+to
+
+dynamo.putItem({
+
+	TableName: event.tables.messages
+....
+....	
+})
+
+
+On testing, we found that text does not appear from text box when we click Send
+So API gateway does not add CORS header in the response for 204 response.
+
+So lets add a header
+
+Access-Control-Allow-Origin
+
+-----------
+CDN : CloudFront
+-----------
+
+CloudFront -> Create new web distribution
+
+Origin settings:
+
+Origin domain name: <bucket-name>
+
+Object caching: Customize
+
+So after creation u will get the domain name.
+
+Open that URL, ur app will open
+
+you can check cache statistics in cloudfront
+
+
+
